@@ -29,6 +29,8 @@ FROM alpine:3.22
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="Kaven Media Server" \
+      org.opencontainers.image.source="https://github.com/kaven-universe/kaven-media-server" \
+      org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$REVISION
 RUN apk add --no-cache ca-certificates tzdata vips vips-heif && addgroup -S kaven && adduser -S -G kaven kaven

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -23,7 +24,10 @@ const (
 	MaxChecksumBytes     = 64 << 10
 )
 
-var evidenceFiles = []string{"container-amd64.json", "container-arm64.json", "manifest.json", "quality.json"}
+var (
+	evidenceFiles       = []string{"container-amd64.json", "container-arm64.json", "manifest.json", "quality.json"}
+	imageVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$`)
+)
 
 type identity struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -73,6 +77,7 @@ type Report struct {
 	RunID         string   `json:"runId"`
 	RunAttempt    string   `json:"runAttempt"`
 	RunURL        string   `json:"runUrl"`
+	ImageVersion  string   `json:"imageVersion"`
 	Architectures []string `json:"architectures"`
 }
 
@@ -134,6 +139,7 @@ func Verify(directory, expectedRevision string) (Report, error) {
 		return Report{}, errors.New("quality evidence does not record every required check as passed")
 	}
 
+	var imageVersion string
 	for _, architecture := range []string{"amd64", "arm64"} {
 		var container containerEvidence
 		name := "container-" + architecture + ".json"
@@ -156,8 +162,13 @@ func Verify(directory, expectedRevision string) (Report, error) {
 		if container.Image.Revision != bundle.Revision || container.Image.Version.Revision != bundle.Revision || container.Image.Version.Modified {
 			return Report{}, fmt.Errorf("%s image identity does not match the evidence revision", architecture)
 		}
-		if container.Image.Version.Version != "ci" || container.Image.Version.GoVersion == "" {
+		if !validImageVersion(container.Image.Version.Version) || container.Image.Version.GoVersion == "" {
 			return Report{}, fmt.Errorf("%s image version identity is invalid", architecture)
+		}
+		if imageVersion == "" {
+			imageVersion = container.Image.Version.Version
+		} else if container.Image.Version.Version != imageVersion {
+			return Report{}, errors.New("container image versions do not match")
 		}
 		if !passedChecks(container.Checks, []string{"build", "runtimeCodecs", "architecture", "identity", "httpSmoke"}) {
 			return Report{}, fmt.Errorf("%s evidence does not record every required check as passed", architecture)
@@ -167,8 +178,12 @@ func Verify(directory, expectedRevision string) (Report, error) {
 	return Report{
 		Accepted: true, Repository: bundle.Repository, Revision: bundle.Revision,
 		RunID: bundle.RunID, RunAttempt: bundle.RunAttempt, RunURL: bundle.RunURL,
-		Architectures: []string{"amd64", "arm64"},
+		ImageVersion: imageVersion, Architectures: []string{"amd64", "arm64"},
 	}, nil
+}
+
+func validImageVersion(value string) bool {
+	return value == "ci" || imageVersionPattern.MatchString(value)
 }
 
 func (report Report) WriteJSON(writer io.Writer) error {

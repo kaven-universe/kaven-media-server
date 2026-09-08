@@ -21,11 +21,57 @@ func TestVerifyAcceptsCompleteNativeEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Accepted || report.Repository != "owner/repository" || report.Revision != fixtureRevision || report.RunID != "123" || report.RunAttempt != "2" {
+	if !report.Accepted || report.Repository != "owner/repository" || report.Revision != fixtureRevision || report.RunID != "123" || report.RunAttempt != "2" || report.ImageVersion != "ci" {
 		t.Fatalf("verification report = %#v", report)
 	}
 	if strings.Join(report.Architectures, ",") != "amd64,arm64" {
 		t.Fatalf("architectures = %v", report.Architectures)
+	}
+}
+
+func TestVerifyAcceptsMatchingReleaseImageVersion(t *testing.T) {
+	directory := writeFixture(t)
+	for _, architecture := range []string{"amd64", "arm64"} {
+		name := "container-" + architecture + ".json"
+		var container containerEvidence
+		readFixtureJSON(t, directory, name, &container)
+		container.Image.Version.Version = "1.2.3-rc.4"
+		writeFixtureJSON(t, directory, name, container)
+	}
+	writeChecksums(t, directory)
+	report, err := Verify(directory, fixtureRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.ImageVersion != "1.2.3-rc.4" {
+		t.Fatalf("image version = %q", report.ImageVersion)
+	}
+}
+
+func TestVerifyRejectsInvalidOrMismatchedImageVersions(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		amd64Version   string
+		arm64Version   string
+		errorSubstring string
+	}{
+		{name: "invalid", amd64Version: "v1.2.3", arm64Version: "v1.2.3", errorSubstring: "version identity"},
+		{name: "mismatch", amd64Version: "1.2.3", arm64Version: "1.2.4", errorSubstring: "versions do not match"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := writeFixture(t)
+			for architecture, version := range map[string]string{"amd64": test.amd64Version, "arm64": test.arm64Version} {
+				name := "container-" + architecture + ".json"
+				var container containerEvidence
+				readFixtureJSON(t, directory, name, &container)
+				container.Image.Version.Version = version
+				writeFixtureJSON(t, directory, name, container)
+			}
+			writeChecksums(t, directory)
+			if _, err := Verify(directory, fixtureRevision); err == nil || !strings.Contains(err.Error(), test.errorSubstring) {
+				t.Fatalf("image version error = %v", err)
+			}
+		})
 	}
 }
 

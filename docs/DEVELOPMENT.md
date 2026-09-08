@@ -132,9 +132,12 @@ The container matrix uses native `ubuntu-24.04` (AMD64) and
 verifies image architecture, and starts the server to check health, embedded
 UI assets, and missing/private routes. The Dockerfile gates both builds on
 the runtime codec matrix. CI embeds the full commit revision in the executable
-and OCI label, then verifies both. CI does not publish images. Container and native
-codec execution still require a successful Docker/CI run; plain Go tests
-without the `libvips` tag cannot establish codec support.
+and OCI label, then verifies both. Pull-request and manual CI do not publish
+images. Release acceptance exports the exact tested native images for its
+publisher, which pushes their platform tags and assembles the multi-architecture
+manifest without a second emulated build. Container and native codec execution
+still require a successful Docker/CI run; plain Go tests without the `libvips`
+tag cannot establish codec support.
 
 The race detector runs on Linux with CGO enabled. Local Windows installations
 without a C compiler can still run the remaining checks from the command list
@@ -144,7 +147,8 @@ After downloading and extracting the combined CI artifact, `verify-ci` checks
 its four SHA-256 entries, bounded regular JSON files, manifest identity, exact
 candidate revision, quality gates, and native AMD64 and ARM64 image records.
 It also verifies image platform, embedded revision, unmodified build identity,
-runtime-codec result, and HTTP smoke result. Retain its JSON output with release
+matching `ci` or semantic release versions, runtime-codec result, and HTTP smoke
+result. Retain its JSON output with release
 evidence; it identifies the accepted run URL and attempt. The assembly job runs
 the same command before upload and includes its `verification.json` output.
 

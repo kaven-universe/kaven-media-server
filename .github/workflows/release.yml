@@ -16,6 +16,8 @@ jobs:
   ci:
     name: Release acceptance
     uses: ./.github/workflows/ci.yml
+    with:
+      export-release-images: true
 
   publish:
     name: Publish release
@@ -82,9 +84,6 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -94,25 +93,49 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push multi-architecture image
-        id: push
-        uses: docker/build-push-action@v7
+      - name: Download accepted native images
+        uses: actions/download-artifact@v8
         with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.release.outputs.tags }}
-          build-args: |
-            VERSION=${{ steps.release.outputs.version }}
-            REVISION=${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.licenses=MIT
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pattern: release-image-${{ github.sha }}-*
+          path: release-images
+          merge-multiple: true
+
+      - name: Push accepted images and publish multi-architecture manifest
+        id: push
+        shell: bash
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAGS: ${{ steps.release.outputs.tags }}
+        run: |
+          set -euo pipefail
+          sources=()
+          for arch in amd64 arm64; do
+            archive="release-images/release-image-$arch.tar.gz"
+            test -s "$archive"
+            gzip --decompress --stdout "$archive" | docker load
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' kaven-media-server:ci)" = "linux/$arch"
+            test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' kaven-media-server:ci)" = "$VERSION"
+            test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' kaven-media-server:ci)" = "$GITHUB_SHA"
+            source="$IMAGE:$VERSION-$arch"
+            docker tag kaven-media-server:ci "$source"
+            docker push "$source"
+            sources+=("$source")
+          done
+
+          while IFS= read -r tag; do
+            test -n "$tag"
+            docker buildx imagetools create --tag "$tag" "${sources[@]}"
+          done <<<"$TAGS"
+
+          inspect=$(docker buildx imagetools inspect "$IMAGE:$VERSION")
+          echo "$inspect"
+          digest=$(awk '$1 == "Digest:" { print $2; exit }' <<<"$inspect")
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to determine the published image digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Verify published image and prepare release assets
         shell: bash

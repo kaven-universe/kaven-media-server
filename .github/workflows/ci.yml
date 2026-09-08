@@ -4,6 +4,12 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      export-release-images:
+        description: Export the accepted native images for the release publisher
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -97,7 +103,20 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build image and verify runtime codecs
-        run: docker buildx bake --set image.platform=linux/${{ matrix.arch }} --set image.tags=kaven-media-server:ci --set image.args.VERSION=ci --set image.args.REVISION=${{ github.sha }} --load
+        shell: bash
+        env:
+          EXPORT_RELEASE_IMAGES: ${{ inputs.export-release-images }}
+        run: |
+          version=ci
+          if [[ "$EXPORT_RELEASE_IMAGES" == "true" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          docker buildx bake \
+            --set image.platform=linux/${{ matrix.arch }} \
+            --set image.tags=kaven-media-server:ci \
+            --set image.args.VERSION="$version" \
+            --set image.args.REVISION=${{ github.sha }} \
+            --load
 
       - name: Verify image architecture
         shell: bash
@@ -165,6 +184,21 @@ jobs:
           path: evidence/container-${{ matrix.arch }}.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Export accepted release image
+        if: ${{ inputs.export-release-images }}
+        shell: bash
+        run: docker save kaven-media-server:ci | gzip -1 > release-image-${{ matrix.arch }}.tar.gz
+
+      - name: Upload accepted release image
+        if: ${{ inputs.export-release-images }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-image-${{ github.sha }}-${{ matrix.arch }}
+          path: release-image-${{ matrix.arch }}.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
 
   evidence:
     name: Assemble CI evidence
