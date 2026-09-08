@@ -62,15 +62,18 @@ jobs:
           fi
 
           prerelease=false
+          short_revision="${GITHUB_SHA:0:12}"
+          major="${version%%.*}"
+          remainder="${version#*.}"
+          minor="${remainder%%.*}"
           tags="$image:$version"
+          tags+=$'\n'"$image:$major.$minor"
+          tags+=$'\n'"$image:latest"
+          tags+=$'\n'"$image:sha-$short_revision"
           if [[ "$version" != *-* ]]; then
             prerelease=false
-            major="${version%%.*}"
-            remainder="${version#*.}"
-            minor="${remainder%%.*}"
-            tags+=$'\n'"$image:$major.$minor"
             tags+=$'\n'"$image:$major"
-            tags+=$'\n'"$image:latest"
+            tags+=$'\n'"$image:stable"
           else
             prerelease=true
           fi
@@ -143,6 +146,7 @@ jobs:
           IMAGE: ${{ steps.release.outputs.image }}
           VERSION: ${{ steps.release.outputs.version }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          TAGS: ${{ steps.release.outputs.tags }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -185,7 +189,8 @@ jobs:
             --arg tag "$VERSION" \
             --arg digest "$DIGEST" \
             --arg revision "$GITHUB_SHA" \
-            '{image: $image, tag: $tag, digest: $digest, revision: $revision, platforms: ["linux/amd64", "linux/arm64"]}' \
+            --arg tags "$TAGS" \
+            '{image: $image, tag: $tag, tags: ($tags | split("\n")), digest: $digest, revision: $revision, platforms: ["linux/amd64", "linux/arm64"]}' \
             > release-assets/docker-image.json
 
       - name: Download verified CI evidence
