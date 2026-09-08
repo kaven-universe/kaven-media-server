@@ -139,8 +139,8 @@ image:
 
 ```powershell
 docker run --rm `
-  -v "C:\path\to\restored-data:/data" `
-  -v "C:\path\to\backups:/backups" `
+  --mount "type=bind,source=C:\path\to\restored-data,target=/data" `
+  --mount "type=bind,source=C:\path\to\backups,target=/backups" `
   kaven-universe/kaven-media-server:1.0.0-rc.1 `
   backup --data-dir /data --output /backups/kaven-media-backup-v1.0.0-rc.1
 ```

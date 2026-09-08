@@ -43,9 +43,9 @@ on restart. There is one administrative role, not per-user or per-file ACLs.
 Only the application account and trusted operators should write to the data
 directory. Path validation, symlink rejection, and atomic publication protect
 HTTP operations; they do not make a directory writable by hostile local users
-a supported deployment. Use one process with one local volume, not replicas
-or shared network storage. Run with the image's default unprivileged user and
-mount only the directories it needs.
+a supported deployment. Use one process with one local bind-mounted directory,
+not replicas or shared network storage. Run with the image's default
+unprivileged user and grant other local programs only the access they need.
 
 Upload, image-dimension, multipart, and concurrency limits are implemented;
 see [development configuration](docs/DEVELOPMENT.md). There is no storage quota,

@@ -24,7 +24,8 @@ While administration is disabled:
 
 This chooses safe disablement over generated credentials because a generated
 secret needs a secure delivery and recovery channel. Container logs and files
-inside the persistent media volume are not acceptable secret-delivery channels.
+inside the persistent media data directory are not acceptable secret-delivery
+channels.
 
 ## Configuration contract
 

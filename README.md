@@ -53,12 +53,22 @@ locally, or use Docker for the complete application.
 docker compose up --build
 ```
 
-All durable state is stored in the `kaven-media-data` volume mounted at
-`/data`. No external database is required.
+All durable state is stored in the host directory `./data`, bind-mounted at
+`/data`. Set `KAVEN_DATA_PATH` before starting Compose to use another absolute
+host path. The directory must be writable by the container's `kaven` user.
+Because this is an ordinary host directory, trusted local programs can access
+selected files directly. Stop every writer before backup, restore, or upgrade,
+and do not modify the SQLite database while the server is running. No external
+database is required.
 The Docker build compiles the frontend from `web/` and embeds it in the Go
 executable; only one application process runs in the final container.
 AMD64 and ARM64 build targets and runtime codec checks are configured; see
 [container build instructions](docs/DEVELOPMENT.md#container-architectures).
+
+In a container management UI, add a **bind** mount with the chosen host data
+directory as its source and `/data` as its read/write container target. Do not
+select a managed or anonymous volume. Keep the same host source path when the
+container is recreated or its image is upgraded.
 
 ## Data layout
 

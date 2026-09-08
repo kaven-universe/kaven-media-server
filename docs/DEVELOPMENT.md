@@ -54,8 +54,15 @@ Build and load one architecture for local execution:
 
 ```sh
 docker buildx bake --set image.platform=linux/amd64 --load
-docker run --rm -p 5558:5558 -v kaven-media-data:/data kaven-media-server:local
+mkdir -p data
+docker run --rm -p 5558:5558 \
+  --mount type=bind,src="$PWD/data",dst=/data \
+  kaven-media-server:local
 ```
+
+The host directory must be writable by the image's `kaven` user. Production
+deployments should bind an absolute host path so the location is independent of
+the shell or Compose project directory.
 
 Release builds should set a stable version and full source revision. These
 values are embedded in `kaven-media version` and the OCI image labels:

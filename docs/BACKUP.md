@@ -1,6 +1,6 @@
 # Backup and restore
 
-`backup` and `restore` are offline commands for single-process, local-volume
+`backup` and `restore` are offline commands for single-process, local-directory
 deployments on Linux and Windows. Restore using the matching server version,
 then upgrade separately. Restore requires exactly the executable's known schema
 migrations and never applies migrations itself.
@@ -13,6 +13,12 @@ active data. The server reconstructs and fully validates the snapshot in private
 staging, responds only after a valid candidate is durable, briefly restarts its
 application lifecycle, applies the candidate, and returns to the upload page.
 Keep the browser open until it reconnects.
+
+For a container deployed with a host bind mount, the validated swap happens
+inside the directory mounted at `/data`; it does not replace the mount itself.
+No Docker command is needed for UI restore. Other programs must stop writing to
+that host directory until the server has restarted and the restored data is
+verified.
 
 The restore operation at `POST /api/v1/admin/restore` is available only when
 administrator credentials are configured. The upload is limited to the same 100,000 snapshot
@@ -132,19 +138,25 @@ docker compose start kaven-media
 ```
 
 Check the backup command's exit status before treating the snapshot as successful.
-For restore, use the same explicitly tagged image and a fresh named volume:
+For command-line restore, use the same explicitly tagged image and a fresh host
+parent directory writable by the image's `kaven` user:
 
 ```sh
-docker volume create kaven-media-restored
-docker run --rm -v kaven-media-restored:/data -v "$PWD/backups:/backups:ro" kaven-media-server:your-version restore --input /backups/snapshot-2026-09-07 --data-dir /data/restored
-docker run --rm -v kaven-media-restored:/data kaven-media-server:your-version check --data-dir /data/restored
+mkdir -p restore-work
+docker run --rm \
+  --mount type=bind,src="$PWD/restore-work",dst=/restore \
+  --mount type=bind,src="$PWD/backups",dst=/backups,readonly \
+  kaven-media-server:your-version restore \
+  --input /backups/snapshot-2026-09-07 --data-dir /restore/data
+docker run --rm \
+  --mount type=bind,src="$PWD/restore-work/data",dst=/data \
+  kaven-media-server:your-version check --data-dir /data
 ```
 
-The image tag above is the tag chosen for your build. Mounting the new volume at
-`/data` initializes it from the image's writable directory; restore publishes
-its new `restored` child. Configure the service to use that volume and
-`KAVEN_DATA_DIR=/data/restored`. Only one server may use the restored directory;
-all durable state still belongs to one volume. Full Docker execution requires
+The image tag above is the tag chosen for your build. Restore publishes the new
+`restore-work/data` directory atomically. Configure the service to bind that
+host directory at `/data`. Only one server may use the restored directory; all
+durable state remains under that one host path. Full Docker execution requires
 container verification; local tests cover the commands and storage operations.
 
 ## Format and locking

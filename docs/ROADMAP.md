@@ -8,7 +8,7 @@ Checkboxes describe implementation status, not merely file presence.
 - [x] Initialize standalone Go repository.
 - [x] Add graceful HTTP server lifecycle.
 - [x] Add SQLite bootstrap and persistent data directories.
-- [x] Add Dockerfile and Compose volume interface.
+- [x] Add Dockerfile and Compose bind-mount interface.
 - [x] Add health and initial server-info endpoints.
 - [x] Add embedded frontend hook.
 - [x] Replace the bootstrap schema with numbered embedded migrations.

@@ -4,8 +4,8 @@
 
 Kaven Media Server is a single-process Go service for image hosting, image
 transformation, Bing wallpaper archiving, and lightweight file hosting. It is
-designed to run from one Docker image with one persistent volume and no external
-database.
+designed to run from one Docker image with one persistent host directory
+bind-mounted at `/data` and no external database.
 
 Primary goals:
 
@@ -43,8 +43,8 @@ Go HTTP server ---- embedded Vue assets
 
 SQLite stores metadata and audit records. Original images, derived images, Bing
 downloads, and HFS content remain ordinary files. Database rows should store
-paths relative to the data directory wherever possible so a Docker volume can
-be moved or restored at a different host path.
+paths relative to the data directory wherever possible so the host directory
+can be moved or restored at a different path.
 
 ## Persistent layout
 
@@ -188,8 +188,8 @@ asynchronous 202 response.
 Virtual HFS roots map URL-safe names to non-overlapping relative directories
 below `hfs/` in the persistent data directory. The default is a private
 `uploaded` root at `hfs/uploaded`. Absolute host paths and paths into other
-managed areas are rejected so one-volume backup and containment guarantees stay
-intact. An explicit external root may use an existing absolute path only
+managed areas are rejected so whole-data-directory backup and containment
+guarantees stay intact. An explicit external root may use an existing absolute path only
 with `readOnly: true`; it is non-portable and cannot be mutated through the
 server. A public root permits unauthenticated reads only. Managed-root mutations
 always require the administrative identity.
@@ -266,7 +266,7 @@ include the HEIF loader. Before an image can finish building, its runtime
 libraries must pass the codec matrix under the runtime user. Native CI runners
 also check the built architecture and exercise the running HTTP server.
 
-The supported default is one container and one local Docker volume. Backups
+The supported default is one container and one local bind-mounted directory. Backups
 must include both SQLite and files from a mutually consistent point in time.
 Offline backup holds the same OS-level data-directory lock as the server,
 importer, and checker. It copies SQLite and recovery journals plus managed files

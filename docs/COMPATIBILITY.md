@@ -376,7 +376,7 @@ behavior, rationale, and corresponding test.
   `TestUploadAuthorizationPolicy`. See [AUTHENTICATION.md](AUTHENTICATION.md).
 - 2026-09-04, `GET /hfs`: the legacy configuration can map virtual roots to
   arbitrary absolute host paths. New roots must be non-overlapping relative
-  paths below the persistent `hfs/` directory, preserving the single-volume
+  paths below the persistent `hfs/` directory, preserving the single-data-root
   deployment and preventing configuration from exposing the host filesystem.
   The deliberate exception is an explicit migration reference configured with
   `readOnly: true`; every requested component is checked for symlinks and no

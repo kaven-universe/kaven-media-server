@@ -352,7 +352,7 @@ func (file *StagedFile) Size() int64 {
 
 // Commit atomically publishes a complete staged file without replacing an
 // existing destination. Hard-link publication provides portable no-overwrite
-// semantics on the supported local-volume deployment model.
+// semantics on the supported local-filesystem deployment model.
 func (file *StagedFile) Commit(relative string, permission os.FileMode) (string, error) {
 	file.mutex.Lock()
 	defer file.mutex.Unlock()

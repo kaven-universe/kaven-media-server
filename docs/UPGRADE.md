@@ -1,17 +1,15 @@
 # Upgrade and rollback
 
-Use one server process and a local data volume. Upgrades require downtime;
-rolling upgrades against one SQLite directory are unsupported. This project
+Use one server process and one local bind-mounted data directory. Upgrades
+require downtime; rolling upgrades against one SQLite directory are unsupported. This project
 has not declared v1: review the [release acceptance criteria](RELEASE.md) before
 deploying a candidate.
 
 ## Prepare
 
 Run `kaven-media version` and record its JSON output along with the exact image
-ID, deployment
-configuration, HFS mappings, secret locations, and actual volume name. Compose
-normally prefixes named volumes with its project name; do not assume the YAML
-volume key is the Docker volume name. Keep the old executable/image available.
+ID, deployment configuration, HFS mappings, secret locations, and resolved host
+data path. Keep the old executable/image available.
 
 Build the candidate separately using [the production build](DEVELOPMENT.md#container-architectures),
 including the UI and libvips. Use distinct version tags and record image IDs;
@@ -31,9 +29,9 @@ Keep backup storage outside the application data directory.
    HFS configuration. Require successful exit statuses. Investigate integrity
    errors before continuing; these commands do not repair damaged data.
 3. Restore with that same version into a new, absent directory. Use the
-   [backup guide](BACKUP.md) for ownership, limits, and fresh-volume Docker
+   [backup guide](BACKUP.md) for ownership, limits, and fresh-directory Docker
    commands. Format 2 snapshots reject a known producer version or revision
-   mismatch before copying. Keep the original volume and backup untouched.
+   mismatch before copying. Keep the original directory and backup untouched.
 4. Run the candidate's `check` against the restored copy. It opens SQLite and
    applies pending embedded migrations before checking integrity. `serve` also
    applies migrations; neither command is a read-only schema probe.
@@ -66,25 +64,24 @@ using this procedure.
 ## Cut over
 
 With both servers stopped, configure the production service to use the
-candidate image/executable and the validated restored directory or volume.
-For the Docker restore layout, set `KAVEN_DATA_DIR=/data/restored` and mount the
-new volume at `/data`. Preserve secret mounts and HFS mappings. Start exactly
-one process, verify health and the user flows below, then enable traffic.
+candidate image/executable and bind the validated restored host directory to
+`/data`. Preserve secret mounts and HFS mappings. Start exactly one process,
+verify health and the user flows below, then enable traffic.
 
 Keep the original data offline through acceptance. Any uploads or changes made
-after cutover exist only in the new volume. Take a new backup using the new
+after cutover exist only in the new directory. Take a new backup using the new
 version after acceptance, and retain the pre-upgrade backup with its old build
 and recorded `version` output.
 
 ## Roll back
 
-Stop the candidate and disable traffic first. Preserve its volume for diagnosis
+Stop the candidate and disable traffic first. Preserve its data directory for diagnosis
 and any post-cutover data recovery. Point the deployment back to the saved old
-image/executable, original volume, and matching configuration, then restart and
+image/executable, original directory, and matching configuration, then restart and
 verify it before reopening traffic.
 
-If the original volume is unavailable, use the old matching executable to
-restore the pre-upgrade backup into another absent directory or fresh volume.
+If the original directory is unavailable, use the old matching executable to
+restore the pre-upgrade backup into another absent directory.
 Check it with the old executable, then configure the old service to use it.
 
 There are no down migrations. Never start an older executable against the
@@ -92,10 +89,10 @@ upgraded database. Current builds reject recorded migration versions that are
 not an ordered prefix of their embedded migrations before changing journal
 mode or applying schema changes. Older builds may lack this guard; it is not a
 schema downgrade or a check of every table definition. Do not overwrite the new
-volume with the backup.
+directory with the backup.
 Rollback restores the pre-upgrade state and does not carry later uploads or
 audit records back automatically. Reconcile those separately before deleting
-any retained data. Do not use `docker compose down -v` during this procedure.
+any retained data. Do not delete either retained host directory during this procedure.
 
 ## Acceptance checks
 

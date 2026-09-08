@@ -42,7 +42,6 @@ USER kaven
 RUN --mount=type=bind,from=build,source=/out/imageproc.test,target=/tmp/imageproc.test \
     /tmp/imageproc.test -test.run='^TestLibvipsCodecMatrix$' -test.v -test.timeout=2m
 ENV KAVEN_DATA_DIR=/data KAVEN_LISTEN=:5558
-VOLUME ["/data"]
 EXPOSE 5558
 ENTRYPOINT ["kaven-media"]
 CMD ["serve"]
