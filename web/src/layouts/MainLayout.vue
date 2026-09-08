@@ -44,6 +44,9 @@ watch(tab, (newTab) => {
         case RouteName.HFS:
             router.push("/hfs").catch(ex => Logger.Error(ex));
             break;
+        case RouteName.Restore:
+            router.push("/restore").catch(ex => Logger.Error(ex));
+            break;
     }
 });
 </script>

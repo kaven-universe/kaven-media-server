@@ -108,7 +108,8 @@ usable with valid Digest credentials.
 The first release has one `admin` role with full administrative access; it does
 not claim multi-user authorization.
 
-- `GET /images` and `/api/*` require admin authentication.
+- `GET /images`, maintenance `/api/*` routes, and the UI restore API require
+  admin authentication.
 - `POST /images/upload` requires admin authentication unless
   `KAVEN_PUBLIC_UPLOADS=true` explicitly makes the legacy upload route public.
 - HFS listing, reads, directory creation, and upload require admin access unless

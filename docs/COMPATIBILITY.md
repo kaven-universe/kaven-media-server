@@ -42,6 +42,7 @@ separate from API compatibility validation.
 | POST | `/hfs/{path...}` | digest auth | Upload files | Implemented |
 | GET | `/api/sync-bing-images-from-db` | digest auth | Return 202, sync asynchronously | Implemented as canonical archive reconciliation |
 | GET | `/api/sync-bing-images-from-dir` | digest auth | Return 202, sync asynchronously | Implemented as canonical archive reconciliation |
+| POST | `/api/v1/admin/restore` | digest auth | New administrative backup-folder upload | Implemented with validation and internal restart |
 
 The unauthenticated legacy image-upload route needs an explicit security and
 compatibility decision before release. Do not expose unrestricted uploads by

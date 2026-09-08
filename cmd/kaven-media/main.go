@@ -22,6 +22,7 @@ import (
 	"kaven.xyz/kaven/kaven-media-server/internal/database"
 	"kaven.xyz/kaven/kaven-media-server/internal/datalock"
 	"kaven.xyz/kaven/kaven-media-server/internal/integrity"
+	"kaven.xyz/kaven/kaven-media-server/internal/uirestore"
 )
 
 func main() {
@@ -70,10 +71,24 @@ func run() error {
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return app.Run(ctx, config.Config{
+		configuration := config.Config{
 			Listen: *listen, DataDir: *dataDir, PublicUploads: *publicUploads, Admin: admin, HFSRoots: hfsRoots,
 			AllowedDomainNames: allowedDomains,
-		})
+		}
+		for {
+			applied, err := uirestore.ApplyPending(configuration.DataDir)
+			if err != nil {
+				return fmt.Errorf("apply pending UI restore: %w", err)
+			}
+			if applied {
+				slog.Info("Applied validated UI restore", "data", configuration.DataDir)
+			}
+			err = app.Run(ctx, configuration)
+			if errors.Is(err, app.ErrRestoreReady) {
+				continue
+			}
+			return err
+		}
 	case "check":
 		fs := flag.NewFlagSet("check", flag.ContinueOnError)
 		dataDir := fs.String("data-dir", config.Env("KAVEN_DATA_DIR", "./data"), "persistent data directory")

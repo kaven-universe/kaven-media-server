@@ -178,6 +178,68 @@ func TestRoutes(t *testing.T) {
 	})
 }
 
+func TestUIRestoreRouteRequiresConfiguredAdministrator(t *testing.T) {
+	dataDir := t.TempDir()
+	db, err := database.Open(context.Background(), dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store, err := storage.New(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processor, err := imageproc.NewDefaultProcessor(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer processor.Close()
+	accessRecorder := newTestAccessRecorder(t, db)
+
+	disabled, err := routesWithJobsAndRestore(db, config.Config{DataDir: dataDir}, store, processor, accessRecorder, nil, nil, nil, func() {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := serve(t, disabled, http.MethodPost, "/api/v1/admin/restore"); response.Code != http.StatusNotFound {
+		t.Fatalf("disabled restore status = %d, want 404", response.Code)
+	}
+
+	authenticator, err := auth.New("admin", []byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, err := routesWithJobsAndRestore(db, config.Config{DataDir: dataDir}, store, processor, accessRecorder, nil, authenticator, nil, func() {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := serve(t, protected, http.MethodPost, "/api/v1/admin/restore")
+	if response.Code != http.StatusUnauthorized || response.Header().Get("WWW-Authenticate") == "" {
+		t.Fatalf("protected restore response = %d, challenge %q", response.Code, response.Header().Get("WWW-Authenticate"))
+	}
+}
+
+func TestRunPreservesCredentialsForInternalRestart(t *testing.T) {
+	password := []byte("restart-secret")
+	dataDir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		result <- Run(ctx, config.Config{
+			Listen: "127.0.0.1:0", DataDir: dataDir,
+			Admin: config.AdminCredentials{Enabled: true, Username: "admin", Password: password},
+		})
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	err := <-result
+	if err != nil {
+		t.Fatalf("run canceled server: %v", err)
+	}
+	if string(password) != "restart-secret" {
+		t.Fatal("Run cleared caller-owned credentials needed by internal restart")
+	}
+}
+
 func TestUploadAuthorizationPolicy(t *testing.T) {
 	dataDir := t.TempDir()
 	db, err := database.Open(context.Background(), dataDir)

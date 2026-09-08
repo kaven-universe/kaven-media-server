@@ -65,6 +65,8 @@ Checkboxes describe implementation status, not merely file presence.
 - [x] Automate frontend build and Go embedding in the Docker build (local tagged
       build verified; full container execution requires Docker/CI verification).
 - [x] Add offline backup and verified restore commands/documentation.
+- [x] Add an authenticated backup-folder restore UI with validated staging and
+      an internal application restart for Docker deployments.
 - [x] Add AMD64/ARM64 container build targets and runtime codec verification gates.
 - [x] Capture legacy animated-GIF transformation behavior and enforce it in the
       production runtime codec matrix.

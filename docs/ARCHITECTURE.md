@@ -246,6 +246,17 @@ Static responses support GET and HEAD, disable directory listings, and require
 cache revalidation. Hash routing needs no catch-all HTML response: missing
 assets and unavailable API routes stay 404 rather than receiving the SPA.
 
+The administrative restore page uploads the ordinary backup directory as
+bounded multipart files whose field names carry validated snapshot-relative
+paths. The server reconstructs the snapshot under `tmp`, invokes the same
+checksum, producer, schema, and integrity validation as CLI restore, and records
+a completed candidate before acknowledging the request. It then shuts down its
+HTTP and background resources, moves the active managed entries into a private
+rollback directory, moves the candidate into place, and starts again in the
+same container. Small durable phase files make each move resumable after an
+abrupt process or host restart. The route is absent unless administration is
+configured.
+
 ## Deployment boundary
 
 Container build targets cover Linux AMD64 and ARM64. The frontend stage uses

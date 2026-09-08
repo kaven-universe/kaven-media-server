@@ -16,6 +16,7 @@
 export enum RouteName {
     Upload = "upload",
     HFS = "hfs",
+    Restore = "restore",
 }
 
 export enum UrlType {

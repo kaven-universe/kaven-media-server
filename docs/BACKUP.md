@@ -5,6 +5,22 @@ deployments on Linux and Windows. Restore using the matching server version,
 then upgrade separately. Restore requires exactly the executable's known schema
 migrations and never applies migrations itself.
 
+Docker operators who cannot run commands can restore from the authenticated web
+UI instead. Open **Restore**, select the snapshot directory itself, review its
+file count and size, and confirm. The selected directory must directly contain
+`manifest.json` and `data/`. The browser uploads the files without modifying the
+active data. The server reconstructs and fully validates the snapshot in private
+staging, responds only after a valid candidate is durable, briefly restarts its
+application lifecycle, applies the candidate, and returns to the upload page.
+Keep the browser open until it reconnects.
+
+The restore operation at `POST /api/v1/admin/restore` is available only when
+administrator credentials are configured. The upload is limited to the same 100,000 snapshot
+entries, 1 TiB total file bytes, and 16 MiB manifest as CLI restore. Only one UI
+restore may run at a time. Validation failure removes owned staging and leaves
+the active database and files unchanged. A power loss after validation resumes
+the recorded swap before SQLite is reopened on the next process start.
+
 Format 2 backup manifests embed the producing `kaven-media version` identity,
 and successful command output repeats that identity. Keep the output with the
 deployment records as an independently retained reference.

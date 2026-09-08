@@ -31,6 +31,11 @@ const routes: RouteRecordRaw[] = [
                 path: "/hfs/:hfsPath(.*)*",
                 component: () => import("pages/FileExplorerPage.vue"),
             },
+            {
+                name: RouteName.Restore,
+                path: "/restore",
+                component: () => import("pages/RestorePage.vue"),
+            },
         ],
     },
 

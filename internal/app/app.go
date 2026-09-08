@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"kaven.xyz/kaven/kaven-media-server/internal/auth"
+	"kaven.xyz/kaven/kaven-media-server/internal/backup"
 	"kaven.xyz/kaven/kaven-media-server/internal/bing"
 	"kaven.xyz/kaven/kaven-media-server/internal/config"
 	"kaven.xyz/kaven/kaven-media-server/internal/database"
@@ -31,6 +32,8 @@ import (
 )
 
 const bingSyncJobName = "Bing archive synchronization"
+
+var ErrRestoreReady = errors.New("validated restore is ready to apply")
 
 func Run(ctx context.Context, cfg config.Config) (resultErr error) {
 	lock, err := datalock.Acquire(cfg.DataDir)
@@ -61,8 +64,12 @@ func Run(ctx context.Context, cfg config.Config) (resultErr error) {
 	defer processor.Close()
 	var authenticator *auth.Authenticator
 	if cfg.Admin.Enabled {
-		authenticator, err = auth.New(cfg.Admin.Username, cfg.Admin.Password)
-		config.ClearAdminPassword(&cfg.Admin)
+		password := append([]byte(nil), cfg.Admin.Password...)
+		authenticator, err = auth.New(cfg.Admin.Username, password)
+		for index := range password {
+			password[index] = 0
+		}
+		cfg.Admin.Password = nil
 		if err != nil {
 			return err
 		}
@@ -130,7 +137,13 @@ func Run(ctx context.Context, cfg config.Config) (resultErr error) {
 		}
 	}()
 
-	handler, err := routesWithJobs(db, cfg, store, processor, accessRecorder, downloadRecorder, authenticator, scheduledJobs)
+	restoreReady := make(chan struct{}, 1)
+	handler, err := routesWithJobsAndRestore(db, cfg, store, processor, accessRecorder, downloadRecorder, authenticator, scheduledJobs, func() {
+		select {
+		case restoreReady <- struct{}{}:
+		default:
+		}
+	})
 	if err != nil {
 		return err
 	}
@@ -157,6 +170,13 @@ func Run(ctx context.Context, cfg config.Config) (resultErr error) {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
+	case <-restoreReady:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("stop server for restore: %w", err)
+		}
+		return ErrRestoreReady
 	}
 }
 
@@ -165,6 +185,10 @@ func routes(db *sql.DB, cfg config.Config, store *storage.Store, processor *imag
 }
 
 func routesWithJobs(db *sql.DB, cfg config.Config, store *storage.Store, processor *imageproc.Processor, accessRecorder *imageaccess.Recorder, downloadRecorder *hfsdownload.Recorder, authenticator *auth.Authenticator, jobs httpapi.JobTrigger) (http.Handler, error) {
+	return routesWithJobsAndRestore(db, cfg, store, processor, accessRecorder, downloadRecorder, authenticator, jobs, nil)
+}
+
+func routesWithJobsAndRestore(db *sql.DB, cfg config.Config, store *storage.Store, processor *imageproc.Processor, accessRecorder *imageaccess.Recorder, downloadRecorder *hfsdownload.Recorder, authenticator *auth.Authenticator, jobs httpapi.JobTrigger, restoreReady func()) (http.Handler, error) {
 	refererPolicy, err := referer.New(cfg.AllowedDomainNames)
 	if err != nil {
 		return nil, fmt.Errorf("configure image referer policy: %w", err)
@@ -215,6 +239,11 @@ func routesWithJobs(db *sql.DB, cfg config.Config, store *storage.Store, process
 	mux.Handle("POST /images/upload", uploadHandler)
 	if authenticator != nil {
 		mux.Handle("GET /images", authenticator.Protect(httpapi.NewImagesHandler(imageRepository)))
+		if restoreReady != nil {
+			mux.Handle("POST /api/v1/admin/restore", authenticator.Protect(httpapi.NewRestoreHandler(
+				cfg.DataDir, backup.DefaultMaxBytes, restoreReady,
+			)))
+		}
 		if jobs != nil {
 			bingSyncHandler, err := httpapi.NewBingSyncHandler(jobs, bingSyncJobName)
 			if err != nil {
