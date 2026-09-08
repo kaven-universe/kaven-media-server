@@ -1,0 +1,218 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Release acceptance
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+
+      - name: Validate release configuration
+        id: release
+        shell: bash
+        env:
+          CONFIGURED_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be semantic version syntax such as v1.0.0 or v1.0.0-rc.1" >&2
+            exit 1
+          fi
+          if [[ -z "$DOCKERHUB_USER" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "DOCKERHUB_USER and DOCKERHUB_TOKEN secrets are required" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          image="$CONFIGURED_IMAGE"
+          if [[ -z "$image" ]]; then
+            image="${DOCKERHUB_USER}/kaven-media-server"
+          fi
+          image="${image,,}"
+          if [[ ! "$image" =~ ^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "Docker Hub image must have namespace/repository syntax: $image" >&2
+            exit 1
+          fi
+
+          prerelease=false
+          tags="$image:$version"
+          if [[ "$version" != *-* ]]; then
+            prerelease=false
+            major="${version%%.*}"
+            remainder="${version#*.}"
+            minor="${remainder%%.*}"
+            tags+=$'\n'"$image:$major.$minor"
+            tags+=$'\n'"$image:$major"
+            tags+=$'\n'"$image:latest"
+          else
+            prerelease=true
+          fi
+
+          {
+            echo "version=$version"
+            echo "image=$image"
+            echo "prerelease=$prerelease"
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push multi-architecture image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.release.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.release.outputs.version }}
+            REVISION=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify published image and prepare release assets
+        shell: bash
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          docker buildx imagetools inspect "$IMAGE@$DIGEST"
+          manifest=$(docker buildx imagetools inspect "$IMAGE@$DIGEST" --raw)
+
+          for arch in amd64 arm64; do
+            platform="linux/$arch"
+            platform_digest=$(jq --raw-output --arg arch "$arch" '
+              [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)]
+              | if length == 1 then .[0].digest else empty end
+            ' <<<"$manifest")
+            if [[ ! "$platform_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Published image must contain exactly one $platform manifest" >&2
+              exit 1
+            fi
+            package="kaven-media-server_${VERSION}_linux_${arch}_alpine"
+            mkdir -p "release-assets/$package"
+            docker pull --platform "$platform" "$IMAGE@$platform_digest"
+            container_id=$(docker create --platform "$platform" "$IMAGE@$platform_digest")
+            trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+            docker cp "$container_id:/usr/local/bin/kaven-media" "release-assets/$package/kaven-media"
+            docker rm "$container_id" >/dev/null
+            trap - EXIT
+            cp LICENSE "release-assets/$package/LICENSE"
+            cat > "release-assets/$package/README.txt" <<EOF
+          Kaven Media Server $VERSION for Linux/$arch on Alpine Linux 3.22.
+
+          Install the ca-certificates, tzdata, vips, and vips-heif packages before
+          running this binary. The recommended distribution is the Docker image:
+
+              docker pull $IMAGE:$VERSION
+          EOF
+            tar -C release-assets -czf "release-assets/$package.tar.gz" "$package"
+            rm -rf "release-assets/$package"
+          done
+
+          jq --null-input \
+            --arg image "$IMAGE" \
+            --arg tag "$VERSION" \
+            --arg digest "$DIGEST" \
+            --arg revision "$GITHUB_SHA" \
+            '{image: $image, tag: $tag, digest: $digest, revision: $revision, platforms: ["linux/amd64", "linux/arm64"]}' \
+            > release-assets/docker-image.json
+
+      - name: Download verified CI evidence
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-evidence-${{ github.sha }}
+          path: release-assets/ci-evidence
+
+      - name: Finalize checksummed release bundle
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          tar -C release-assets -czf "release-assets/ci-evidence_${VERSION}.tar.gz" ci-evidence
+          rm -rf release-assets/ci-evidence
+          (cd release-assets && sha256sum *.tar.gz docker-image.json > SHA256SUMS)
+          (cd release-assets && sha256sum --check SHA256SUMS)
+
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ steps.release.outputs.version }}
+          path: release-assets
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          IMAGE: ${{ steps.release.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Docker image: \`$IMAGE:$VERSION\`
+
+          Immutable digest: \`$IMAGE@$DIGEST\`
+
+          The attached Linux binaries target Alpine Linux 3.22 and require the
+          runtime packages listed in each archive. See \`SHA256SUMS\` for asset
+          verification. The CI evidence archive contains the quality and native
+          AMD64/ARM64 container acceptance records for this commit.
+          EOF
+          notes=$(cat release-notes.md)
+          args=(--verify-tag --title "Kaven Media Server $GITHUB_REF_NAME" --generate-notes --notes "$notes")
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" release-assets/* "${args[@]}"

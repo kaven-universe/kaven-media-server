@@ -1,0 +1,21 @@
+{
+  "sourceBase64": "R0lGODlhAgACAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwECAAAh+QQFCgAAACwAAAAAAgACAAACAoxTACH5BAUUAAAALAAAAAACAAIAgExpcQAA/wICjFMAOw==",
+  "input": {
+    "format": "gif",
+    "width": 2,
+    "height": 4,
+    "pages": 2,
+    "pageHeight": 2,
+    "delay": [100, 200],
+    "loop": 3,
+    "gifLoopCount": 2
+  },
+  "transformed": {
+    "format": "gif",
+    "width": 1,
+    "height": 1,
+    "pages": 1,
+    "delay": [100],
+    "loop": 1
+  }
+}

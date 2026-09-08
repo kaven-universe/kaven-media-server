@@ -1,0 +1,10 @@
+[
+  {"referer":"","status":200},
+  {"referer":"https://example.com/page","status":200},
+  {"referer":"https://sub.example.com/","status":200},
+  {"referer":"https://badexample.com/","status":403},
+  {"referer":"https://example.com.evil.test/","status":403},
+  {"referer":"http://localhost/","status":200},
+  {"referer":"http://192.168.1.2/","status":200},
+  {"referer":"https://other.test/","status":403}
+]

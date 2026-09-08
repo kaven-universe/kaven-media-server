@@ -1,0 +1,16 @@
+[
+  {
+    "name": "representative-svg-image",
+    "path": "files/pixel.svg",
+    "mediaType": "image/svg+xml",
+    "size": 121,
+    "sha1": "691e1789be4fd78f3283cf093c2e82c71e2df217"
+  },
+  {
+    "name": "representative-hfs-text",
+    "path": "files/hello world.txt",
+    "mediaType": "text/plain",
+    "size": 39,
+    "sha1": "5f52010584051b6d81c57e961bd95773492ead14"
+  }
+]

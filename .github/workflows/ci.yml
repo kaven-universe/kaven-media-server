@@ -1,0 +1,227 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Go quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [[ -n "$unformatted" ]]; then
+            echo "The following Go files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run race tests
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Record quality evidence
+        shell: bash
+        env:
+          EVIDENCE_REPOSITORY: ${{ github.repository }}
+          EVIDENCE_REVISION: ${{ github.sha }}
+          EVIDENCE_RUN_ID: ${{ github.run_id }}
+          EVIDENCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p evidence
+          jq --null-input \
+            --arg repository "$EVIDENCE_REPOSITORY" \
+            --arg revision "$EVIDENCE_REVISION" \
+            --arg runId "$EVIDENCE_RUN_ID" \
+            --arg runAttempt "$EVIDENCE_RUN_ATTEMPT" \
+            --arg runnerOs "$RUNNER_OS" \
+            --arg runnerArch "$RUNNER_ARCH" \
+            --arg goVersion "$(go version)" \
+            '{schemaVersion: 1, repository: $repository, revision: $revision, runId: $runId, runAttempt: $runAttempt, runner: {os: $runnerOs, architecture: $runnerArch}, goVersion: $goVersion, checks: {format: "passed", tests: "passed", race: "passed", vet: "passed"}}' \
+            > evidence/quality.json
+
+      - name: Upload quality evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-evidence-quality
+          path: evidence/quality.json
+          if-no-files-found: error
+          retention-days: 90
+
+  container:
+    name: Container (${{ matrix.arch }})
+    needs: quality
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image and verify runtime codecs
+        run: docker buildx bake --set image.platform=linux/${{ matrix.arch }} --set image.tags=kaven-media-server:ci --set image.args.VERSION=ci --set image.args.REVISION=${{ github.sha }} --load
+
+      - name: Verify image architecture
+        shell: bash
+        run: |
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' kaven-media-server:ci)" = 'linux/${{ matrix.arch }}'
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' kaven-media-server:ci)" = '${{ github.sha }}'
+          test "$(docker run --rm kaven-media-server:ci version | jq --raw-output .revision)" = '${{ github.sha }}'
+
+      - name: Verify embedded UI in running container
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_id=$(docker run --detach --publish 127.0.0.1:5558:5558 kaven-media-server:ci)
+          trap 'docker logs "$container_id"; docker rm --force --volumes "$container_id"' EXIT
+          ready=false
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:5558/healthz; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+          curl --fail --silent --show-error http://127.0.0.1:5558/ > /tmp/kaven-ui.html
+          grep -q '<title>Kaven Media Server</title>' /tmp/kaven-ui.html
+          grep -q 'type="module"' /tmp/kaven-ui.html
+          asset=$(grep -o 'src="/assets/[^" ]*\.js"' /tmp/kaven-ui.html | head -n 1 | cut -d '"' -f 2)
+          test -n "$asset"
+          curl --fail --silent --show-error "http://127.0.0.1:5558$asset" > /tmp/kaven-ui.js
+          test -s /tmp/kaven-ui.js
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5558/assets/missing.js)" = 404
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5558/hfs)" = 404
+
+      - name: Record native container evidence
+        shell: bash
+        env:
+          EVIDENCE_REPOSITORY: ${{ github.repository }}
+          EVIDENCE_REVISION: ${{ github.sha }}
+          EVIDENCE_RUN_ID: ${{ github.run_id }}
+          EVIDENCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVIDENCE_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p evidence
+          docker run --rm kaven-media-server:ci version > evidence/version-${EVIDENCE_ARCH}.json
+          jq --null-input \
+            --arg repository "$EVIDENCE_REPOSITORY" \
+            --arg revision "$EVIDENCE_REVISION" \
+            --arg runId "$EVIDENCE_RUN_ID" \
+            --arg runAttempt "$EVIDENCE_RUN_ATTEMPT" \
+            --arg architecture "$EVIDENCE_ARCH" \
+            --arg runnerOs "$RUNNER_OS" \
+            --arg runnerArch "$RUNNER_ARCH" \
+            --arg imageId "$(docker image inspect --format '{{.Id}}' kaven-media-server:ci)" \
+            --arg imagePlatform "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' kaven-media-server:ci)" \
+            --arg imageRevision "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' kaven-media-server:ci)" \
+            --slurpfile version evidence/version-${EVIDENCE_ARCH}.json \
+            '{schemaVersion: 1, repository: $repository, revision: $revision, runId: $runId, runAttempt: $runAttempt, targetArchitecture: $architecture, runner: {os: $runnerOs, architecture: $runnerArch}, image: {id: $imageId, platform: $imagePlatform, revision: $imageRevision, version: $version[0]}, checks: {build: "passed", runtimeCodecs: "passed", architecture: "passed", identity: "passed", httpSmoke: "passed"}}' \
+            > evidence/container-${EVIDENCE_ARCH}.json
+          rm evidence/version-${EVIDENCE_ARCH}.json
+
+      - name: Upload native container evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-evidence-container-${{ matrix.arch }}
+          path: evidence/container-${{ matrix.arch }}.json
+          if-no-files-found: error
+          retention-days: 90
+
+  evidence:
+    name: Assemble CI evidence
+    needs: [quality, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download successful job evidence
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ci-evidence-*
+          path: evidence
+          merge-multiple: true
+
+      - name: Build evidence manifest
+        shell: bash
+        env:
+          EVIDENCE_REPOSITORY: ${{ github.repository }}
+          EVIDENCE_REVISION: ${{ github.sha }}
+          EVIDENCE_RUN_ID: ${{ github.run_id }}
+          EVIDENCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVIDENCE_SERVER_URL: ${{ github.server_url }}
+        run: |
+          test -s evidence/quality.json
+          test -s evidence/container-amd64.json
+          test -s evidence/container-arm64.json
+          jq --null-input \
+            --arg repository "$EVIDENCE_REPOSITORY" \
+            --arg revision "$EVIDENCE_REVISION" \
+            --arg runId "$EVIDENCE_RUN_ID" \
+            --arg runAttempt "$EVIDENCE_RUN_ATTEMPT" \
+            --arg runUrl "$EVIDENCE_SERVER_URL/$EVIDENCE_REPOSITORY/actions/runs/$EVIDENCE_RUN_ID" \
+            '{schemaVersion: 1, repository: $repository, revision: $revision, runId: $runId, runAttempt: $runAttempt, runUrl: $runUrl, requiredFiles: ["quality.json", "container-amd64.json", "container-arm64.json"]}' \
+            > evidence/manifest.json
+          (cd evidence && sha256sum container-amd64.json container-arm64.json manifest.json quality.json) > /tmp/kaven-media-ci-evidence.sha256
+          mv /tmp/kaven-media-ci-evidence.sha256 evidence/SHA256SUMS
+
+      - name: Verify assembled evidence
+        run: >-
+          go run ./cmd/kaven-media verify-ci
+          --evidence-dir ./evidence
+          --revision "${{ github.sha }}"
+          > evidence/verification.json
+
+      - name: Upload combined CI evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-evidence-${{ github.sha }}
+          path: evidence
+          if-no-files-found: error
+          retention-days: 90

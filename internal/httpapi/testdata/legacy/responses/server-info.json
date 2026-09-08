@@ -1,0 +1,7 @@
+{
+  "upload": {
+    "maxFileCount": 100,
+    "maxImageFileSize": 104857600,
+    "maxHfsFileSize": 1048576000
+  }
+}

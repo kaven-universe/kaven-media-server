@@ -1,0 +1,48 @@
+{
+  "name": "kaven-media-web",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Image and file hosting with Kaven Media Server",
+  "productName": "Kaven Media Server",
+  "author": "Kaven <kaven@wuwenkai.com>",
+  "private": true,
+  "packageManager": "pnpm@11.8.0",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts,.vue,.cjs ./",
+    "lint:fix": "eslint --ext .js,.ts,.vue,.cjs ./ --fix",
+    "typecheck": "quasar prepare && vue-tsc --noEmit -p tsconfig.vue-tsc.json",
+    "dev": "quasar dev",
+    "build": "quasar build"
+  },
+  "dependencies": {
+    "@quasar/extras": "^2.0.4",
+    "axios": "^1.20.0",
+    "file-icon-vectors": "^1.0.0",
+    "kaven-basic": "^6.2.0",
+    "quasar": "^2.28.0",
+    "vue": "^3.5.42",
+    "vue-i18n": "^11.4.10",
+    "vue-router": "^5.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@intlify/unplugin-vue-i18n": "^11.2.5",
+    "@quasar/app-vite": "3.8.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^26.4.0",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "@wenkai.wu/eslint-config": "^2.4.1",
+    "autoprefixer": "^10.5.4",
+    "debug": "^4.4.3",
+    "eslint": "^10.9.1",
+    "eslint-plugin-vue": "^10.10.0",
+    "typescript": "~6.0.3",
+    "vite-plugin-checker": "^0.14.5",
+    "vue-tsc": "^3.3.11"
+  },
+  "engines": {
+    "node": "^28 || ^26 || ^24 || ^22 || ^20 || ^18",
+    "npm": ">= 6.13.4",
+    "yarn": ">= 1.21.1"
+  }
+}

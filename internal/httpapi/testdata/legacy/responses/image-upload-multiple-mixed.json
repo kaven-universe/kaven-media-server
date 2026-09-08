@@ -1,0 +1,20 @@
+[
+  {
+    "errorCode": 0,
+    "image": {
+      "id": "64b64c5f0123456789abcdef",
+      "uuid": "0123456789abcdef0123456789abcdef",
+      "name": "pixel.svg",
+      "sha1": "691e1789be4fd78f3283cf093c2e82c71e2df217"
+    }
+  },
+  {
+    "errorCode": 10,
+    "image": {
+      "id": "",
+      "uuid": "fedcba9876543210fedcba9876543210",
+      "name": "notes.txt",
+      "sha1": ""
+    }
+  }
+]

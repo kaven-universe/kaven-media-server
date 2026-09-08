@@ -1,0 +1,11 @@
+services:
+  kaven-media:
+    build: .
+    ports:
+      - "5558:5558"
+    volumes:
+      - kaven-media-data:/data
+    restart: unless-stopped
+
+volumes:
+  kaven-media-data:

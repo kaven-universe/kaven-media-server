@@ -1,0 +1,92 @@
+[
+  {
+    "name": "server-info",
+    "request": { "method": "GET", "path": "/server/info", "authentication": "none" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/server-info.json" }
+  },
+  {
+    "name": "image-metadata-by-sha1",
+    "request": { "method": "GET", "path": "/image/691e1789be4fd78f3283cf093c2e82c71e2df217?json", "authentication": "referer-policy" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/image-metadata.json" }
+  },
+  {
+    "name": "image-original-by-sha1",
+    "request": { "method": "GET", "path": "/image/691e1789be4fd78f3283cf093c2e82c71e2df217", "authentication": "referer-policy" },
+    "response": { "status": 200, "contentType": "image/svg+xml", "body": "files/pixel.svg" }
+  },
+  {
+    "name": "image-invalid-id",
+    "request": { "method": "GET", "path": "/image/invalid", "authentication": "referer-policy" },
+    "response": { "status": 400 }
+  },
+  {
+    "name": "image-not-found",
+    "request": { "method": "GET", "path": "/image/aaaaaaaaaaaaaaaaaaaaaaaa", "authentication": "referer-policy" },
+    "response": { "status": 404 }
+  },
+  {
+    "name": "images-list",
+    "request": { "method": "GET", "path": "/images", "authentication": "digest" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/images-list.json" }
+  },
+  {
+    "name": "image-upload-single-success",
+    "request": { "method": "POST", "path": "/images/upload", "authentication": "none", "multipartField": "images" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/image-upload-success.json" }
+  },
+  {
+    "name": "image-upload-single-duplicate",
+    "request": { "method": "POST", "path": "/images/upload", "authentication": "none", "multipartField": "images" },
+    "response": { "status": 400, "contentType": "application/json; charset=utf-8", "body": "responses/image-upload-duplicate.json" }
+  },
+  {
+    "name": "image-upload-multiple-mixed",
+    "request": { "method": "POST", "path": "/images/upload", "authentication": "none", "multipartField": "images" },
+    "response": { "status": 400, "contentType": "application/json; charset=utf-8", "body": "responses/image-upload-multiple-mixed.json" }
+  },
+  {
+    "name": "hfs-roots",
+    "request": { "method": "GET", "path": "/hfs/", "authentication": "digest" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/hfs-roots.json" }
+  },
+  {
+    "name": "hfs-directory",
+    "request": { "method": "GET", "path": "/hfs/uploaded", "authentication": "per-root" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/hfs-directory.json" }
+  },
+  {
+    "name": "hfs-render-text-file",
+    "request": { "method": "GET", "path": "/hfs/uploaded/hello%20world.txt", "authentication": "per-root" },
+    "response": { "status": 200, "contentType": "text/plain", "body": "files/hello world.txt" }
+  },
+  {
+    "name": "hfs-create-directory-success",
+    "request": { "method": "POST", "path": "/hfs/uploaded/new-folder?mkdir", "authentication": "digest" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/error-none.json" }
+  },
+  {
+    "name": "hfs-create-directory-conflict",
+    "request": { "method": "POST", "path": "/hfs/uploaded/existing?mkdir", "authentication": "digest" },
+    "response": { "status": 400, "contentType": "application/json; charset=utf-8", "body": "responses/error-file-already-exists.json" }
+  },
+  {
+    "name": "hfs-upload-missing-directory",
+    "request": { "method": "POST", "path": "/hfs/uploaded/missing", "authentication": "digest", "multipartField": "file" },
+    "response": { "status": 400, "contentType": "application/json; charset=utf-8", "body": "responses/error-folder-not-found.json" }
+  },
+  {
+    "name": "hfs-upload-single-success",
+    "request": { "method": "POST", "path": "/hfs/uploaded", "authentication": "digest", "multipartField": "file" },
+    "response": { "status": 200, "contentType": "application/json; charset=utf-8", "body": "responses/error-none.json" }
+  },
+  {
+    "name": "sync-bing-from-database",
+    "request": { "method": "GET", "path": "/api/sync-bing-images-from-db", "authentication": "digest" },
+    "response": { "status": 202 }
+  },
+  {
+    "name": "sync-bing-from-directory",
+    "request": { "method": "GET", "path": "/api/sync-bing-images-from-dir", "authentication": "digest" },
+    "response": { "status": 202 }
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "errorCode": 11,
+  "image": {
+    "id": "64b64c5f0123456789abcdef",
+    "uuid": "fedcba9876543210fedcba9876543210",
+    "name": "duplicate.svg",
+    "sha1": "691e1789be4fd78f3283cf093c2e82c71e2df217"
+  }
+}
