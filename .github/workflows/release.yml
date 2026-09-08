@@ -64,15 +64,12 @@ jobs:
           prerelease=false
           short_revision="${GITHUB_SHA:0:12}"
           major="${version%%.*}"
-          remainder="${version#*.}"
-          minor="${remainder%%.*}"
           tags="$image:$version"
-          tags+=$'\n'"$image:$major.$minor"
+          tags+=$'\n'"$image:$major"
           tags+=$'\n'"$image:latest"
           tags+=$'\n'"$image:sha-$short_revision"
           if [[ "$version" != *-* ]]; then
             prerelease=false
-            tags+=$'\n'"$image:$major"
             tags+=$'\n'"$image:stable"
           else
             prerelease=true
