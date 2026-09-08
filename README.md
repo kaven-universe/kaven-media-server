@@ -91,10 +91,9 @@ directory.
 ## Releases
 
 Semantic version tags run the full release acceptance workflow, publish the
-AMD64/ARM64 image to Docker Hub with full version, major, `latest`, and
-commit tags (`stable` also follows stable releases), and create a GitHub Release
-with checksummed Alpine Linux binaries and CI evidence. Repository maintainers
-must configure the
+AMD64/ARM64 image to Docker Hub with `latest` and an automatically detected
+major-version tag such as `1`, and create a GitHub Release with checksummed
+Alpine Linux binaries and CI evidence. Repository maintainers must configure the
 Docker Hub secrets described in [release acceptance](docs/RELEASE.md#automated-publication)
 before publishing the first release. The documented public snapshot publisher
 keeps private development history out of GitHub while retaining one source

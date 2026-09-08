@@ -62,21 +62,16 @@ jobs:
           fi
 
           prerelease=false
-          short_revision="${GITHUB_SHA:0:12}"
           major="${version%%.*}"
-          tags="$image:$version"
+          tags="$image:latest"
           tags+=$'\n'"$image:$major"
-          tags+=$'\n'"$image:latest"
-          tags+=$'\n'"$image:sha-$short_revision"
-          if [[ "$version" != *-* ]]; then
-            prerelease=false
-            tags+=$'\n'"$image:stable"
-          else
+          if [[ "$version" == *-* ]]; then
             prerelease=true
           fi
 
           {
             echo "version=$version"
+            echo "major=$major"
             echo "image=$image"
             echo "prerelease=$prerelease"
             echo "tags<<EOF"
@@ -106,6 +101,7 @@ jobs:
         env:
           IMAGE: ${{ steps.release.outputs.image }}
           VERSION: ${{ steps.release.outputs.version }}
+          MAJOR: ${{ steps.release.outputs.major }}
           TAGS: ${{ steps.release.outputs.tags }}
         run: |
           set -euo pipefail
@@ -128,7 +124,7 @@ jobs:
             docker buildx imagetools create --tag "$tag" "${sources[@]}"
           done <<<"$TAGS"
 
-          inspect=$(docker buildx imagetools inspect "$IMAGE:$VERSION")
+          inspect=$(docker buildx imagetools inspect "$IMAGE:$MAJOR")
           echo "$inspect"
           digest=$(awk '$1 == "Digest:" { print $2; exit }' <<<"$inspect")
           if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
@@ -142,6 +138,7 @@ jobs:
         env:
           IMAGE: ${{ steps.release.outputs.image }}
           VERSION: ${{ steps.release.outputs.version }}
+          MAJOR: ${{ steps.release.outputs.major }}
           DIGEST: ${{ steps.push.outputs.digest }}
           TAGS: ${{ steps.release.outputs.tags }}
         run: |
@@ -175,7 +172,7 @@ jobs:
           Install the ca-certificates, tzdata, vips, and vips-heif packages before
           running this binary. The recommended distribution is the Docker image:
 
-              docker pull $IMAGE:$VERSION
+              docker pull $IMAGE:$MAJOR
           EOF
             tar -C release-assets -czf "release-assets/$package.tar.gz" "$package"
             rm -rf "release-assets/$package"
@@ -183,7 +180,7 @@ jobs:
 
           jq --null-input \
             --arg image "$IMAGE" \
-            --arg tag "$VERSION" \
+            --arg tag "$MAJOR" \
             --arg digest "$DIGEST" \
             --arg revision "$GITHUB_SHA" \
             --arg tags "$TAGS" \
@@ -220,13 +217,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.release.outputs.version }}
+          MAJOR: ${{ steps.release.outputs.major }}
           IMAGE: ${{ steps.release.outputs.image }}
           DIGEST: ${{ steps.push.outputs.digest }}
           PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           set -euo pipefail
           cat > release-notes.md <<EOF
-          Docker image: \`$IMAGE:$VERSION\`
+          Docker image: \`$IMAGE:$MAJOR\`
 
           Immutable digest: \`$IMAGE@$DIGEST\`
 

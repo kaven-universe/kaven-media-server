@@ -82,13 +82,12 @@ Push a SemVer tag such as `v1.0.0-rc.1` or `v1.0.0`. The workflow reruns the
 quality and native AMD64/ARM64 container acceptance jobs. Each native job
 exports its exact accepted image; the publisher pushes those images and creates
 one multi-architecture manifest without rebuilding under emulation. Every
-release publishes its complete version, major (for example, `1`),
-`latest`, and `sha-<12-character-commit>` aliases. Stable releases additionally
-publish the `stable` alias. The workflow verifies the
+release publishes `latest` and a major-version alias derived from the release
+version (`1.7.3` publishes `1`, for example). The workflow verifies the
 published image index, extracts Alpine Linux AMD64 and ARM64 binaries, bundles the
 verified CI evidence, writes SHA-256 checksums, and creates a GitHub Release
-with generated notes. Version-specific `-amd64` and `-arm64` tags retain the
-manifest's accepted platform images.
+with generated notes. Version-specific `-amd64` and `-arm64` staging tags retain
+the manifest's accepted platform images.
 
 Never move or reuse a published version tag. Docker image digests and the commit
 revision in `docker-image.json` identify the immutable release inputs.
