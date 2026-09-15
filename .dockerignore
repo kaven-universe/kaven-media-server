@@ -1,0 +1,12 @@
+.git
+bin
+data
+web/node_modules
+web/.quasar
+web/dist
+.cache
+.gocache
+.gotmp
+.gomodcache
+internal/webui/dist
+web/.pnpm-store

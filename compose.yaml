@@ -1,0 +1,10 @@
+services:
+  kaven-media:
+    build: .
+    ports:
+      - "5558:5558"
+    volumes:
+      - type: bind
+        source: ${KAVEN_DATA_PATH:-./data}
+        target: /data
+    restart: unless-stopped
