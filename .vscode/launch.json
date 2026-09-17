@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Kaven Media Server API only",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/kaven-media",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "serve",
+        "--listen",
+        "127.0.0.1:5558",
+        "--data-dir",
+        "${workspaceFolder}/data"
+      ]
+    },
+    {
+      "name": "Debug Kaven Media Server UI (Quasar dev + HMR)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/web",
+      "serverReadyAction": {
+        "pattern": "http://localhost:([0-9]+)",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Kaven Media Server (API + UI dev)",
+      "configurations": [
+        "Debug Kaven Media Server API only",
+        "Debug Kaven Media Server UI (Quasar dev + HMR)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

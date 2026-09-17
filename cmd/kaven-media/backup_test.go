@@ -1,0 +1,112 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"kaven.xyz/kaven/kaven-media-server/internal/backup"
+	"kaven.xyz/kaven/kaven-media-server/internal/config"
+	"kaven.xyz/kaven/kaven-media-server/internal/database"
+	"kaven.xyz/kaven/kaven-media-server/internal/datalock"
+	"kaven.xyz/kaven/kaven-media-server/internal/repository"
+)
+
+func TestBackupRestoreCommands(t *testing.T) {
+	parent := t.TempDir()
+	source := filepath.Join(parent, "source")
+	for _, name := range []string{"upload", "cache", "download/bing", "hfs", "tmp"} {
+		if err := os.MkdirAll(filepath.Join(source, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db, err := database.Open(context.Background(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := repository.NewAdminSettingsRepository(db).Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.HFSRoots = []config.HFSRoot{{Name: "uploaded", Path: "upload"}}
+	if err := repository.NewAdminSettingsRepository(db).Update(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KAVEN_DATA_DIR", source)
+	snapshot := filepath.Join(parent, "snapshot")
+	restored := filepath.Join(parent, "restored")
+	var output bytes.Buffer
+	if err := runBackup(context.Background(), "backup", []string{"--output", snapshot}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var report backup.Report
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Path != snapshot || report.Files != 1 || report.ManifestVersion != 3 || report.Producer == nil || report.Producer.GoVersion == "" {
+		t.Fatalf("report = %+v", report)
+	}
+	output.Reset()
+	if err := runBackup(context.Background(), "restore", []string{"--input", snapshot, "--data-dir", restored}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var restoreReport backup.Report
+	if err := json.Unmarshal(output.Bytes(), &restoreReport); err != nil {
+		t.Fatal(err)
+	}
+	if restoreReport.ManifestVersion != 3 || restoreReport.Producer == nil || restoreReport.Producer.Revision != report.Producer.Revision {
+		t.Fatalf("restore report = %+v", restoreReport)
+	}
+	output.Reset()
+	if err := runCheck(context.Background(), restored, &output, false); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := datalock.Acquire(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	output.Reset()
+	if err := runBackup(context.Background(), "backup", []string{"--output", filepath.Join(parent, "busy-backup")}, &output); !errors.Is(err, datalock.ErrBusy) {
+		t.Fatalf("backup ignored process lock: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatal("failed backup wrote success report")
+	}
+	if err := runCheck(context.Background(), source, &output, false); !errors.Is(err, datalock.ErrBusy) {
+		t.Fatalf("check ignored process lock: %v", err)
+	}
+}
+
+func TestBackupCommandRejectsInvalidArgumentsAndRetainsHFSSettings(t *testing.T) {
+	for _, command := range []string{"backup", "restore"} {
+		for _, args := range [][]string{nil, {"--unknown"}, {"extra"}, {"--max-bytes", "oops"}} {
+			if err := runBackup(context.Background(), command, args, &bytes.Buffer{}); err == nil {
+				t.Fatalf("accepted %s %v", command, args)
+			}
+		}
+	}
+	dataDir := t.TempDir()
+	db, err := database.Open(context.Background(), dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := config.DefaultRuntimeSettings(dataDir)
+	settings.HFSRoots = []config.HFSRoot{{Name: "archive", Path: "C:/archive", ReadOnly: true}}
+	if err := repository.NewAdminSettingsRepository(db).Update(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := runBackup(context.Background(), "backup", []string{"--data-dir", dataDir, "--output", filepath.Join(t.TempDir(), "backup")}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("backup with external HFS setting: %v", err)
+	}
+}

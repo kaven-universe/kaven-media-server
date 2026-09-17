@@ -1,0 +1,13 @@
+{
+  "group": {
+    "default": { "targets": ["image"] }
+  },
+  "target": {
+    "image": {
+      "context": ".",
+      "dockerfile": "Dockerfile",
+      "tags": ["kaven-media-server:local"],
+      "platforms": ["linux/amd64", "linux/arm64"]
+    }
+  }
+}
